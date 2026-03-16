@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Mic, ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, Settings, Trees } from "lucide-react";
+import { Mic, ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, Settings, Trees, Users, FileCheck } from "lucide-react";
 import React from 'react';
 
 const mobileNavItems = [
@@ -15,10 +15,13 @@ const desktopNavItems = [
   { name: "Assistente", href: "/", icon: Mic },
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Inventario Vivo", href: "/inventario", icon: Sprout },
-  { name: "Ordini", href: "/ordini", icon: Package },
+  { name: "Ordini (Fornitori)", href: "/ordini", icon: Package },
   { name: "Task", href: "/task", icon: ClipboardList },
   { name: "Scanner", href: "/scanner", icon: ScanLine },
-  { name: "Impostazioni IA", href: "/impostazioni", icon: Settings },
+  // ERP Replacement
+  { name: "Clienti (CRM)", href: "/clienti", icon: Users },
+  { name: "Genera DDT", href: "/vendite", icon: FileCheck },
+  { name: "Impostazioni", href: "/impostazioni", icon: Settings },
 ];
 
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
