@@ -7,72 +7,48 @@ const ai = new GoogleGenAI({
 });
 
 const SYSTEM_MESSAGE = `Sei il cervello intelligente di un gestionale logistico per un vivaio professionale.
-Il tuo compito è capire l'INTENTO dell'operatore e restituire ESCLUSIVAMENTE un singolo oggetto JSON.
+Il tuo compito e' capire l'INTENTO dell'operatore e restituire ESCLUSIVAMENTE un singolo oggetto JSON valido.
+Non aggiungere mai spiegazioni, testo, markdown o commenti al di fuori del JSON.
 
 ==TIPI DI INTENTO==
 
-1. OPERAZIONI DI MAGAZZINO (fisica sul prodotto già in stock):
-   - "azione": "CARICO"       → Quando arriva merce nuova/reso fornitore. Aumenta giacenza.
-   - "azione": "SCARICO"      → Quando si vende o consegna merce. Diminuisce giacenza.
-   - "azione": "SCARTO"       → Quando si buttano piante danneggiate. Diminuisce giacenza.
-   - "azione": "SPOSTAMENTO"  → Quando si sposta merce da un posto a un altro. Cambia posizione.
+1. OPERAZIONI DI MAGAZZINO (merce fisicamente presente in struttura):
+   - "azione": "CARICO"       -> Merce fisicamente arrivata (es. "scaricata dal camion", "sono arrivate")
+   - "azione": "SCARICO"      -> Vendita o consegna di merce
+   - "azione": "SCARTO"       -> Piante danneggiate da buttare
+   - "azione": "SPOSTAMENTO"  -> Cambio posizione fisica in magazzino
 
-2. ORDINE DI ACQUISTO (richiesta di acquisire merce da un fornitore):
-   - "azione": "ORDINE" → Usare SEMPRE quando l'operatore dice "comprare", "acquistare", "dobbiamo ordinare", "bisogna comprare", "fai un ordine", ecc.
-   
-3. TASK / ATTIVITÀ (un promemoria o cosa da fare):
-   - "azione": "TASK" → Usare quando l'operatore dice "ricordati di", "aggiungi attività", "metti in lista", ecc.
+2. ORDINE DI ACQUISTO (acquisire da fornitore):
+   - "azione": "ORDINE" -> Parole chiave: "comprare", "acquistare", "ordinare", "bisogna comprare", "fai un ordine"
 
-4. ELIMINAZIONE (cancellare qualcosa dal sistema):
-   - "azione": "ELIMINA" → Usare quando l'operatore dice "cancella", "elimina", "rimuovi", "togli", "annulla", ecc.
+3. TASK / ATTIVITA':
+   - "azione": "TASK" -> Parole chiave: "ricordati", "aggiungi attivita'", "metti in lista", "non dimenticare"
+
+4. ELIMINAZIONE DI UN SINGOLO RECORD:
+   - "azione": "ELIMINA"
    - "target_type": uno tra "TASK", "ORDINE", "PIANTA"
-   - "criterio": il testo da cercare per trovare il record (es. nome pianta, descrizione task, ecc.)
-   
+   - "criterio": parola chiave da cercare
+   - Usare quando l'operatore dice: "cancella", "elimina", "rimuovi", "togli", "annulla"
+   - Esempio: "cancella il task delle orchidee" -> { "azione": "ELIMINA", "target_type": "TASK", "criterio": "orchidee" }
+
+5. ELIMINAZIONE MASSIVA (cancellare tutti i dati di un tipo):
+   - "azione": "ELIMINA_TUTTO"
+   - "target_types": array con uno o piu' tra "TASK", "ORDINI", "PIANTE"
+   - Usare quando si dice: "elimina tutto", "cancella tutti gli ordini", "svuota l'inventario", "azzera le task"
+   - Esempio: "cancella tutti gli ordini e tutte le task" -> { "azione": "ELIMINA_TUTTO", "target_types": ["ORDINI", "TASK"] }
+   - Esempio: "elimina tutto" -> { "azione": "ELIMINA_TUTTO", "target_types": ["TASK", "ORDINI", "PIANTE"] }
+   - Esempio: "svuota l'inventario" -> { "azione": "ELIMINA_TUTTO", "target_types": ["PIANTE"] }
+
 ==REGOLE CRITICHE==
-- Se l'operatore usa i verbi COMPRARE, ACQUISTARE o ORDINARE, devi SEMPRE e SOLO usare l'azione "ORDINE". MAI USARE "CARICO" in questi casi!
-- L'azione "CARICO" si usa SOLO quando c'è un riscontro fisico di merce già arrivata in struttura.
-- Restituisci SOLO JSON puro, senza markdown o backtick.
+- COMPRARE / ACQUISTARE / ORDINARE -> SEMPRE "ORDINE", MAI "CARICO".
+- "CARICO" solo se la merce e' fisicamente arrivata in struttura.
+- Se il comando usa "tutto", "tutti", "ogni", "azzerare" -> usa ELIMINA_TUTTO.
+- Se il comando menziona qualcosa di specifico -> usa ELIMINA con criterio.
+- Restituisci SOLO JSON puro, zero testo extra.`;
 
-==FORMATO JSON==
-Per CARICO, SCARICO, SCARTO, SPOSTAMENTO:
-{
-  "azione": "SCARICO",
-  "quantita": 15,
-  "pianta": "Rosa Rossa",
-  "motivo": "vendita al dettaglio",
-  "posizione_origine": "Serra Sud",
-  "posizione_destinazione": null
-}
-
-Per ORDINE:
-{
-  "azione": "ORDINE",
-  "quantita": 24,
-  "pianta": "Rosa Blu",
-  "motivo": "scorte esaurite"
-}
-
-Per TASK:
-{
-  "azione": "TASK",
-  "descrizione": "Innaffiare le orchidee in Serra 3 entro venerdì"
-}
-
-Per ELIMINA:
-{
-  "azione": "ELIMINA",
-  "target_type": "TASK",
-  "criterio": "Innaffiare le orchidee"
-}`;
-
-// Helper to log every command to the Chat_History table
+// Log every command to the Chat_History table
 async function logToHistory(user_message: string, ai_response: string, azione: string, success: boolean) {
-  await supabase.from('Chat_History').insert({
-    user_message,
-    ai_response,
-    azione,
-    success,
-  });
+  await supabase.from('Chat_History').insert({ user_message, ai_response, azione, success });
 }
 
 export async function POST(req: Request) {
@@ -86,7 +62,6 @@ export async function POST(req: Request) {
   let cmd: Record<string, any> = {};
 
   try {
-    // 1. Call Gemini to Parse Intent
     const aiRes = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: message,
@@ -102,8 +77,8 @@ export async function POST(req: Request) {
     try {
       cmd = JSON.parse(textResponse);
     } catch {
-      await logToHistory(message, 'Parsing error', 'UNKNOWN', false);
-      return NextResponse.json({ error: 'Non ho capito bene il comando, potresti ripeterlo?' }, { status: 422 });
+      await logToHistory(message, 'Parsing JSON error', 'UNKNOWN', false);
+      return NextResponse.json({ error: 'Non ho capito il comando, puoi ripeterlo?' }, { status: 422 });
     }
 
     const { azione } = cmd;
@@ -115,15 +90,9 @@ export async function POST(req: Request) {
     // ── TASK ──────────────────────────────────────────────────────────────────
     if (azione === 'TASK') {
       const { descrizione } = cmd;
-      if (!descrizione) {
-        return NextResponse.json({ error: 'Non ho capito la descrizione del task.' }, { status: 422 });
-      }
-      const { data: newTask, error } = await supabase
-        .from('Task')
-        .insert({ description: descrizione, status: 'DA_FARE' })
-        .select().single();
+      if (!descrizione) return NextResponse.json({ error: 'Non ho capito il task.' }, { status: 422 });
+      const { data: newTask, error } = await supabase.from('Task').insert({ description: descrizione, status: 'DA_FARE' }).select().single();
       if (error) throw error;
-
       const msg = `📋 Task aggiunto: "${descrizione}"`;
       await logToHistory(message, msg, azione, true);
       return NextResponse.json({ result: cmd, record: newTask, message: msg });
@@ -132,26 +101,18 @@ export async function POST(req: Request) {
     // ── ORDINE ────────────────────────────────────────────────────────────────
     if (azione === 'ORDINE') {
       const { quantita, pianta } = cmd;
-      if (!quantita || !pianta) {
-        return NextResponse.json({ error: "Mancano la quantità o il nome della pianta per l'ordine." }, { status: 422 });
-      }
-      const { data: newOrder, error } = await supabase
-        .from('Order')
-        .insert({ plantName: pianta, quantity: quantita, status: 'DA_ORDINARE' })
-        .select().single();
+      if (!quantita || !pianta) return NextResponse.json({ error: "Mancano dati per l'ordine." }, { status: 422 });
+      const { data: newOrder, error } = await supabase.from('Order').insert({ plantName: pianta, quantity: quantita, status: 'DA_ORDINARE' }).select().single();
       if (error) throw error;
-
       const msg = `🛒 Ordine creato: ${quantita} x "${pianta}"`;
       await logToHistory(message, msg, azione, true);
       return NextResponse.json({ result: cmd, record: newOrder, message: msg });
     }
 
-    // ── ELIMINA ───────────────────────────────────────────────────────────────
+    // ── ELIMINA (single record) ───────────────────────────────────────────────
     if (azione === 'ELIMINA') {
       const { target_type, criterio } = cmd;
-      if (!target_type || !criterio) {
-        return NextResponse.json({ error: 'Non ho capito cosa eliminare o il criterio di ricerca.' }, { status: 422 });
-      }
+      if (!target_type || !criterio) return NextResponse.json({ error: 'Specifica cosa eliminare.' }, { status: 422 });
 
       let deletedMsg = '';
       let found = false;
@@ -174,13 +135,13 @@ export async function POST(req: Request) {
         const { data: plants } = await supabase.from('Plant').select('id, name, quantity').ilike('name', `%${criterio}%`);
         if (plants && plants.length > 0) {
           await supabase.from('Plant').delete().eq('id', plants[0].id);
-          deletedMsg = `🗑️ Pianta eliminata dall'inventario: "${plants[0].name}"`;
+          deletedMsg = `🗑️ Pianta eliminata: "${plants[0].name}"`;
           found = true;
         }
       }
 
       if (!found) {
-        const msg = `⚠️ Nessun record trovato con criterio: "${criterio}"`;
+        const msg = `⚠️ Nessun record trovato con: "${criterio}"`;
         await logToHistory(message, msg, azione, false);
         return NextResponse.json({ message: msg }, { status: 404 });
       }
@@ -189,16 +150,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ result: cmd, message: deletedMsg });
     }
 
-    // ── WAREHOUSE OPERATIONS (CARICO, SCARICO, SCARTO, SPOSTAMENTO) ───────────
-    const { quantita, pianta, motivo, posizione_origine, posizione_destinazione } = cmd;
-    if (!quantita || !pianta) {
-      return NextResponse.json({ error: 'Mancano i dati base (quantità o pianta). Ripeti perfavore.' }, { status: 422 });
+    // ── ELIMINA_TUTTO (bulk delete) ───────────────────────────────────────────
+    if (azione === 'ELIMINA_TUTTO') {
+      const { target_types } = cmd;
+      if (!target_types || !Array.isArray(target_types) || target_types.length === 0) {
+        return NextResponse.json({ error: 'Specifica cosa eliminare (es. TASK, ORDINI, PIANTE).' }, { status: 422 });
+      }
+
+      const results: string[] = [];
+
+      if (target_types.includes('TASK')) {
+        const { count } = await supabase.from('Task').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('*', { count: 'exact', head: true });
+        results.push(`📋 Task: ${count ?? 'tutti'} eliminati`);
+      }
+      if (target_types.includes('ORDINI')) {
+        const { count } = await supabase.from('Order').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('*', { count: 'exact', head: true });
+        results.push(`🛒 Ordini: ${count ?? 'tutti'} eliminati`);
+      }
+      if (target_types.includes('PIANTE')) {
+        const { count } = await supabase.from('Plant').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('*', { count: 'exact', head: true });
+        results.push(`🌱 Piante: ${count ?? 'tutte'} eliminate`);
+      }
+
+      const msg = `🗑️ Eliminazione massiva completata:\n${results.join('\n')}`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, message: msg });
     }
 
-    const { data: plants, error: searchError } = await supabase
-      .from('Plant')
-      .select('*')
-      .ilike('name', `%${pianta}%`);
+    // ── WAREHOUSE OPERATIONS ──────────────────────────────────────────────────
+    const { quantita, pianta, motivo, posizione_origine, posizione_destinazione } = cmd;
+    if (!quantita || !pianta) {
+      return NextResponse.json({ error: 'Mancano quantità o pianta. Ripeti perfavore.' }, { status: 422 });
+    }
+
+    const { data: plants, error: searchError } = await supabase.from('Plant').select('*').ilike('name', `%${pianta}%`);
     if (searchError) throw searchError;
 
     let targetPlant = plants && plants.length > 0 ? plants[0] : null;
@@ -233,16 +218,14 @@ export async function POST(req: Request) {
       targetPlant = updatedPlant;
     }
 
-    const { error: movementError } = await supabase
-      .from('Movement')
-      .insert({
-        plantId: targetPlant.id,
-        type: azione,
-        quantity: quantita,
-        reason: motivo || null,
-        fromLocation: posizione_origine || null,
-        toLocation: posizione_destinazione || null,
-      });
+    const { error: movementError } = await supabase.from('Movement').insert({
+      plantId: targetPlant.id,
+      type: azione,
+      quantity: quantita,
+      reason: motivo || null,
+      fromLocation: posizione_origine || null,
+      toLocation: posizione_destinazione || null,
+    });
     if (movementError) throw movementError;
 
     const emoji: Record<string, string> = { CARICO: '📦', SCARICO: '🏷️', SCARTO: '🗑️', SPOSTAMENTO: '🚛' };
@@ -253,9 +236,6 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Error in AI Assistant API:', error);
     await logToHistory(message, 'Internal server error', cmd?.azione || 'UNKNOWN', false);
-    return NextResponse.json(
-      { error: 'Si è verificato un errore durante il salvataggio nel database.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Si e\' verificato un errore durante il salvataggio nel database.' }, { status: 500 });
   }
 }
