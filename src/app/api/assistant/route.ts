@@ -27,23 +27,26 @@ Non aggiungere mai spiegazioni, testo, markdown o commenti al di fuori del JSON.
 4. ELIMINAZIONE DI UN SINGOLO RECORD:
    - "azione": "ELIMINA"
    - "target_type": uno tra "TASK", "ORDINE", "PIANTA"
-   - "criterio": parola chiave da cercare
-   - Usare quando l'operatore dice: "cancella", "elimina", "rimuovi", "togli", "annulla"
+   - "criterio": parola chiave da cercare (nome specifico, non "tutto")
+   - Usare quando l'operatore dice: "cancella", "elimina", "rimuovi", "togli", "annulla" + un NOME SPECIFICO
    - Esempio: "cancella il task delle orchidee" -> { "azione": "ELIMINA", "target_type": "TASK", "criterio": "orchidee" }
+   - Esempio: "rimuovi l'ordine delle rose" -> { "azione": "ELIMINA", "target_type": "ORDINE", "criterio": "rose" }
 
-5. ELIMINAZIONE MASSIVA (cancellare tutti i dati di un tipo):
+5. ELIMINAZIONE MASSIVA (cancellare TUTTI i dati di uno o piu' tipi):
    - "azione": "ELIMINA_TUTTO"
    - "target_types": array con uno o piu' tra "TASK", "ORDINI", "PIANTE"
-   - Usare quando si dice: "elimina tutto", "cancella tutti gli ordini", "svuota l'inventario", "azzera le task"
-   - Esempio: "cancella tutti gli ordini e tutte le task" -> { "azione": "ELIMINA_TUTTO", "target_types": ["ORDINI", "TASK"] }
+   - IMPORTANTE: Usare SEMPRE quando compaiono le parole "tutto", "tutti", "tutte", "ogni", "azzerare", "svuotare"
    - Esempio: "elimina tutto" -> { "azione": "ELIMINA_TUTTO", "target_types": ["TASK", "ORDINI", "PIANTE"] }
+   - Esempio: "cancella tutti gli ordini e tutte le task" -> { "azione": "ELIMINA_TUTTO", "target_types": ["ORDINI", "TASK"] }
+   - Esempio: "azzera le task" -> { "azione": "ELIMINA_TUTTO", "target_types": ["TASK"] }
    - Esempio: "svuota l'inventario" -> { "azione": "ELIMINA_TUTTO", "target_types": ["PIANTE"] }
+   - Esempio: "elimina tutti gli ordini e tutto l'inventario" -> { "azione": "ELIMINA_TUTTO", "target_types": ["ORDINI", "PIANTE"] }
 
 ==REGOLE CRITICHE==
 - COMPRARE / ACQUISTARE / ORDINARE -> SEMPRE "ORDINE", MAI "CARICO".
 - "CARICO" solo se la merce e' fisicamente arrivata in struttura.
-- Se il comando usa "tutto", "tutti", "ogni", "azzerare" -> usa ELIMINA_TUTTO.
-- Se il comando menziona qualcosa di specifico -> usa ELIMINA con criterio.
+- TUTTO / TUTTI / TUTTE / OGNI -> SEMPRE "ELIMINA_TUTTO", MAI "ELIMINA".
+- "ELIMINA" si usa SOLO per un record specifico identificato da un nome concreto.
 - Restituisci SOLO JSON puro, zero testo extra.`;
 
 // Log every command to the Chat_History table
@@ -81,10 +84,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Non ho capito il comando, puoi ripeterlo?' }, { status: 422 });
     }
 
-    const { azione } = cmd;
+    let { azione } = cmd;
     if (!azione) {
       await logToHistory(message, 'No azione found', 'UNKNOWN', false);
       return NextResponse.json({ error: "Impossibile determinare l'azione dal comando." }, { status: 422 });
+    }
+
+    // ── Smart upgrade: ELIMINA with bulk criterio -> ELIMINA_TUTTO ────────────
+    if (azione === 'ELIMINA' && cmd.criterio) {
+      const bulkWords = ['tutto', 'tutti', 'tutte', 'all', 'ogni', 'qualsiasi', 'intera', 'intero'];
+      if (bulkWords.some(w => cmd.criterio.toLowerCase().includes(w))) {
+        // Upgrade to bulk delete
+        const typeMap: Record<string, string> = { TASK: 'TASK', ORDINE: 'ORDINI', PIANTA: 'PIANTE' };
+        cmd.azione = 'ELIMINA_TUTTO';
+        cmd.target_types = cmd.target_type ? [typeMap[cmd.target_type] || 'TASK'] : ['TASK', 'ORDINI', 'PIANTE'];
+        azione = 'ELIMINA_TUTTO';
+      }
+    }
+
+    // ── Also smart upgrade: if message text contains bulk words, force ELIMINA_TUTTO ─
+    if (azione === 'ELIMINA') {
+      const msgLower = message.toLowerCase();
+      const hasBulk = ['elimina tutto', 'cancella tutto', 'svuota tutto', 'elimina tutti', 'cancella tutti', 'rimuovi tutto'].some(p => msgLower.includes(p));
+      if (hasBulk) {
+        cmd.azione = 'ELIMINA_TUTTO';
+        cmd.target_types = ['TASK', 'ORDINI', 'PIANTE'];
+        azione = 'ELIMINA_TUTTO';
+      }
     }
 
     // ── TASK ──────────────────────────────────────────────────────────────────
@@ -107,6 +133,55 @@ export async function POST(req: Request) {
       const msg = `🛒 Ordine creato: ${quantita} x "${pianta}"`;
       await logToHistory(message, msg, azione, true);
       return NextResponse.json({ result: cmd, record: newOrder, message: msg });
+    }
+
+    // ── ELIMINA_TUTTO (bulk delete) ───────────────────────────────────────────
+    if (azione === 'ELIMINA_TUTTO') {
+      const { target_types } = cmd;
+
+      // If no target_types found, delete everything
+      const targets: string[] = (Array.isArray(target_types) && target_types.length > 0)
+        ? target_types
+        : ['TASK', 'ORDINI', 'PIANTE'];
+
+      const results: string[] = [];
+
+      if (targets.includes('TASK')) {
+        const { data: allTasks } = await supabase.from('Task').select('id');
+        if (allTasks && allTasks.length > 0) {
+          const ids = allTasks.map(t => t.id);
+          await supabase.from('Task').delete().in('id', ids);
+          results.push(`📋 ${allTasks.length} Task eliminati`);
+        } else {
+          results.push('📋 Nessun Task da eliminare');
+        }
+      }
+
+      if (targets.includes('ORDINI')) {
+        const { data: allOrders } = await supabase.from('Order').select('id');
+        if (allOrders && allOrders.length > 0) {
+          const ids = allOrders.map(o => o.id);
+          await supabase.from('Order').delete().in('id', ids);
+          results.push(`🛒 ${allOrders.length} Ordini eliminati`);
+        } else {
+          results.push('🛒 Nessun Ordine da eliminare');
+        }
+      }
+
+      if (targets.includes('PIANTE')) {
+        const { data: allPlants } = await supabase.from('Plant').select('id');
+        if (allPlants && allPlants.length > 0) {
+          const ids = allPlants.map(p => p.id);
+          await supabase.from('Plant').delete().in('id', ids);
+          results.push(`🌱 ${allPlants.length} Piante eliminate`);
+        } else {
+          results.push('🌱 Nessuna Pianta da eliminare');
+        }
+      }
+
+      const msg = `🗑️ Eliminazione completata: ${results.join(' | ')}`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, message: msg });
     }
 
     // ── ELIMINA (single record) ───────────────────────────────────────────────
@@ -150,37 +225,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ result: cmd, message: deletedMsg });
     }
 
-    // ── ELIMINA_TUTTO (bulk delete) ───────────────────────────────────────────
-    if (azione === 'ELIMINA_TUTTO') {
-      const { target_types } = cmd;
-      if (!target_types || !Array.isArray(target_types) || target_types.length === 0) {
-        return NextResponse.json({ error: 'Specifica cosa eliminare (es. TASK, ORDINI, PIANTE).' }, { status: 422 });
-      }
-
-      const results: string[] = [];
-
-      if (target_types.includes('TASK')) {
-        const { count } = await supabase.from('Task').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('*', { count: 'exact', head: true });
-        results.push(`📋 Task: ${count ?? 'tutti'} eliminati`);
-      }
-      if (target_types.includes('ORDINI')) {
-        const { count } = await supabase.from('Order').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('*', { count: 'exact', head: true });
-        results.push(`🛒 Ordini: ${count ?? 'tutti'} eliminati`);
-      }
-      if (target_types.includes('PIANTE')) {
-        const { count } = await supabase.from('Plant').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('*', { count: 'exact', head: true });
-        results.push(`🌱 Piante: ${count ?? 'tutte'} eliminate`);
-      }
-
-      const msg = `🗑️ Eliminazione massiva completata:\n${results.join('\n')}`;
-      await logToHistory(message, msg, azione, true);
-      return NextResponse.json({ result: cmd, message: msg });
-    }
-
     // ── WAREHOUSE OPERATIONS ──────────────────────────────────────────────────
     const { quantita, pianta, motivo, posizione_origine, posizione_destinazione } = cmd;
     if (!quantita || !pianta) {
-      return NextResponse.json({ error: 'Mancano quantità o pianta. Ripeti perfavore.' }, { status: 422 });
+      return NextResponse.json({ error: 'Mancano quantita o pianta. Ripeti perfavore.' }, { status: 422 });
     }
 
     const { data: plants, error: searchError } = await supabase.from('Plant').select('*').ilike('name', `%${pianta}%`);
@@ -236,6 +284,6 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Error in AI Assistant API:', error);
     await logToHistory(message, 'Internal server error', cmd?.azione || 'UNKNOWN', false);
-    return NextResponse.json({ error: 'Si e\' verificato un errore durante il salvataggio nel database.' }, { status: 500 });
+    return NextResponse.json({ error: "Si e' verificato un errore durante il salvataggio." }, { status: 500 });
   }
 }
