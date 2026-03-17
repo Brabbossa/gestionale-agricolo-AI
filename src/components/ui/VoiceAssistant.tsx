@@ -189,16 +189,6 @@ export default function VoiceAssistant() {
           
           <div className="flex-1">
             <p className="font-medium leading-relaxed">{feedback.message}</p>
-            
-            {/* Parsed JSON Data Display */}
-            {parsedData && feedback.type === 'success' && (
-              <div className="mt-4 p-4 bg-black/30 rounded-lg border border-white/5 overflow-x-auto">
-                <p className="text-xs text-emerald-500/70 mb-2 font-mono uppercase">SINCRONIZZAZIONE DATABASE:</p>
-                <pre className="text-sm font-mono text-emerald-300/90 whitespace-pre-wrap">
-                  {JSON.stringify(parsedData, null, 2)}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
       )}
