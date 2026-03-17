@@ -21,11 +21,16 @@ Il tuo compito è capire l'INTENTO dell'operatore e restituire ESCLUSIVAMENTE un
    - "azione": "ORDINE" → Usare SEMPRE quando l'operatore dice "comprare", "acquistare", "dobbiamo ordinare", "bisogna comprare", "fai un ordine", ecc.
    
 3. TASK / ATTIVITÀ (un promemoria o cosa da fare):
-   - "azione": "TASK" → Usare quando l'operatore dice "ricordati di", "aggiungi attività", "metti in lista", "non dimenticare di", ecc.
+   - "azione": "TASK" → Usare quando l'operatore dice "ricordati di", "aggiungi attività", "metti in lista", ecc.
 
+4. ELIMINAZIONE (cancellare qualcosa dal sistema):
+   - "azione": "ELIMINA" → Usare quando l'operatore dice "cancella", "elimina", "rimuovi", "togli", "annulla", ecc.
+   - "target_type": uno tra "TASK", "ORDINE", "PIANTA"
+   - "criterio": il testo da cercare per trovare il record (es. nome pianta, descrizione task, ecc.)
+   
 ==REGOLE CRITICHE==
 - Se l'operatore usa i verbi COMPRARE, ACQUISTARE o ORDINARE, devi SEMPRE e SOLO usare l'azione "ORDINE". MAI USARE "CARICO" in questi casi!
-- L'azione "CARICO" si usa SOLO quando c'è un riscontro fisico di merce già arrivata in struttura (es. "abbiamo scaricato dal camion", "sono arrivate fisicamente in serra").
+- L'azione "CARICO" si usa SOLO quando c'è un riscontro fisico di merce già arrivata in struttura.
 - Restituisci SOLO JSON puro, senza markdown o backtick.
 
 ==FORMATO JSON==
@@ -51,17 +56,36 @@ Per TASK:
 {
   "azione": "TASK",
   "descrizione": "Innaffiare le orchidee in Serra 3 entro venerdì"
+}
+
+Per ELIMINA:
+{
+  "azione": "ELIMINA",
+  "target_type": "TASK",
+  "criterio": "Innaffiare le orchidee"
 }`;
 
+// Helper to log every command to the Chat_History table
+async function logToHistory(user_message: string, ai_response: string, azione: string, success: boolean) {
+  await supabase.from('Chat_History').insert({
+    user_message,
+    ai_response,
+    azione,
+    success,
+  });
+}
+
 export async function POST(req: Request) {
+  const body = await req.json();
+  const { message } = body;
+
+  if (!message) {
+    return NextResponse.json({ error: 'Messaggio richiesto' }, { status: 400 });
+  }
+
+  let cmd: Record<string, any> = {};
+
   try {
-    const body = await req.json();
-    const { message } = body;
-
-    if (!message) {
-      return NextResponse.json({ error: 'Messaggio richiesto' }, { status: 400 });
-    }
-
     // 1. Call Gemini to Parse Intent
     const aiRes = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -75,19 +99,20 @@ export async function POST(req: Request) {
     const textResponse = aiRes.text;
     if (!textResponse) throw new Error('Nessuna risposta dal modello IA');
 
-    let cmd: Record<string, any>;
     try {
       cmd = JSON.parse(textResponse);
     } catch {
+      await logToHistory(message, 'Parsing error', 'UNKNOWN', false);
       return NextResponse.json({ error: 'Non ho capito bene il comando, potresti ripeterlo?' }, { status: 422 });
     }
 
     const { azione } = cmd;
     if (!azione) {
+      await logToHistory(message, 'No azione found', 'UNKNOWN', false);
       return NextResponse.json({ error: "Impossibile determinare l'azione dal comando." }, { status: 422 });
     }
 
-    // 2. Handle TASK intent
+    // ── TASK ──────────────────────────────────────────────────────────────────
     if (azione === 'TASK') {
       const { descrizione } = cmd;
       if (!descrizione) {
@@ -98,14 +123,13 @@ export async function POST(req: Request) {
         .insert({ description: descrizione, status: 'DA_FARE' })
         .select().single();
       if (error) throw error;
-      return NextResponse.json({
-        result: cmd,
-        record: newTask,
-        message: `✅ Task aggiunto: "${descrizione}"`,
-      });
+
+      const msg = `📋 Task aggiunto: "${descrizione}"`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, record: newTask, message: msg });
     }
 
-    // 3. Handle ORDINE intent
+    // ── ORDINE ────────────────────────────────────────────────────────────────
     if (azione === 'ORDINE') {
       const { quantita, pianta } = cmd;
       if (!quantita || !pianta) {
@@ -116,14 +140,56 @@ export async function POST(req: Request) {
         .insert({ plantName: pianta, quantity: quantita, status: 'DA_ORDINARE' })
         .select().single();
       if (error) throw error;
-      return NextResponse.json({
-        result: cmd,
-        record: newOrder,
-        message: `🛒 Ordine creato: ${quantita} unità di "${pianta}" aggiunto alla lista d'acquisto!`,
-      });
+
+      const msg = `🛒 Ordine creato: ${quantita} x "${pianta}"`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, record: newOrder, message: msg });
     }
 
-    // 4. Handle Warehouse Operations (CARICO, SCARICO, SCARTO, SPOSTAMENTO)
+    // ── ELIMINA ───────────────────────────────────────────────────────────────
+    if (azione === 'ELIMINA') {
+      const { target_type, criterio } = cmd;
+      if (!target_type || !criterio) {
+        return NextResponse.json({ error: 'Non ho capito cosa eliminare o il criterio di ricerca.' }, { status: 422 });
+      }
+
+      let deletedMsg = '';
+      let found = false;
+
+      if (target_type === 'TASK') {
+        const { data: tasks } = await supabase.from('Task').select('id, description').ilike('description', `%${criterio}%`);
+        if (tasks && tasks.length > 0) {
+          await supabase.from('Task').delete().eq('id', tasks[0].id);
+          deletedMsg = `🗑️ Task eliminato: "${tasks[0].description}"`;
+          found = true;
+        }
+      } else if (target_type === 'ORDINE') {
+        const { data: orders } = await supabase.from('Order').select('id, plantName, quantity').ilike('plantName', `%${criterio}%`);
+        if (orders && orders.length > 0) {
+          await supabase.from('Order').delete().eq('id', orders[0].id);
+          deletedMsg = `🗑️ Ordine eliminato: ${orders[0].quantity} x "${orders[0].plantName}"`;
+          found = true;
+        }
+      } else if (target_type === 'PIANTA') {
+        const { data: plants } = await supabase.from('Plant').select('id, name, quantity').ilike('name', `%${criterio}%`);
+        if (plants && plants.length > 0) {
+          await supabase.from('Plant').delete().eq('id', plants[0].id);
+          deletedMsg = `🗑️ Pianta eliminata dall'inventario: "${plants[0].name}"`;
+          found = true;
+        }
+      }
+
+      if (!found) {
+        const msg = `⚠️ Nessun record trovato con criterio: "${criterio}"`;
+        await logToHistory(message, msg, azione, false);
+        return NextResponse.json({ message: msg }, { status: 404 });
+      }
+
+      await logToHistory(message, deletedMsg, azione, true);
+      return NextResponse.json({ result: cmd, message: deletedMsg });
+    }
+
+    // ── WAREHOUSE OPERATIONS (CARICO, SCARICO, SCARTO, SPOSTAMENTO) ───────────
     const { quantita, pianta, motivo, posizione_origine, posizione_destinazione } = cmd;
     if (!quantita || !pianta) {
       return NextResponse.json({ error: 'Mancano i dati base (quantità o pianta). Ripeti perfavore.' }, { status: 422 });
@@ -146,10 +212,9 @@ export async function POST(req: Request) {
         if (createError) throw createError;
         targetPlant = newPlant;
       } else {
-        return NextResponse.json(
-          { error: `Non ho trovato "${pianta}" in inventario. Vuoi ordinarlo? Dimmi "ordina ${quantita} ${pianta}".` },
-          { status: 404 }
-        );
+        const msg = `⚠️ Non ho trovato "${pianta}" in inventario.`;
+        await logToHistory(message, msg, azione, false);
+        return NextResponse.json({ error: msg }, { status: 404 });
       }
     } else {
       let newQuantity = targetPlant.quantity;
@@ -181,14 +246,13 @@ export async function POST(req: Request) {
     if (movementError) throw movementError;
 
     const emoji: Record<string, string> = { CARICO: '📦', SCARICO: '🏷️', SCARTO: '🗑️', SPOSTAMENTO: '🚛' };
-    return NextResponse.json({
-      result: cmd,
-      plant: targetPlant,
-      message: `${emoji[azione] || '✅'} ${azione}: ${quantita} "${targetPlant.name}" salvato. Giacenza attuale: ${targetPlant.quantity} pz.`,
-    });
+    const msg = `${emoji[azione] || '✅'} ${azione}: ${quantita} "${targetPlant.name}" — Giacenza: ${targetPlant.quantity} pz.`;
+    await logToHistory(message, msg, azione, true);
+    return NextResponse.json({ result: cmd, plant: targetPlant, message: msg });
 
   } catch (error) {
     console.error('Error in AI Assistant API:', error);
+    await logToHistory(message, 'Internal server error', cmd?.azione || 'UNKNOWN', false);
     return NextResponse.json(
       { error: 'Si è verificato un errore durante il salvataggio nel database.' },
       { status: 500 }
