@@ -3,20 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
-  Mic, ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, 
+  ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, 
   Settings, Trees, Users, FileCheck, ShoppingCart, TrendingUp, 
   FlaskConical, Container, Leaf
 } from "lucide-react";
 import React from 'react';
+import GlobalVoiceFAB from "@/components/ui/GlobalVoiceFAB";
 
 const mobileNavItems = [
-  { name: "Assistente", href: "/", icon: Mic },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Task", href: "/task", icon: ClipboardList },
   { name: "Scanner", href: "/scanner", icon: ScanLine },
 ];
 
 const desktopNavItems = [
-  { name: "Assistente", href: "/", icon: Mic },
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Inventario Vivo", href: "/inventario", icon: Sprout },
   { name: "Acquisti", href: "/ordini", icon: ShoppingCart },
@@ -80,6 +80,9 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
       <main className="flex-1 flex flex-col relative z-10 w-full md:w-auto h-[calc(100vh-80px)] md:h-screen overflow-y-auto overflow-x-hidden">
         {children}
       </main>
+
+      {/* GLOBAL VOICE FAB — visible on every page */}
+      <GlobalVoiceFAB />
 
       {/* MOBILE BOTTOM NAVIGATION */}
       <nav className="md:hidden fixed bottom-0 left-0 w-full h-[80px] bg-slate-800/80 backdrop-blur-xl border-t border-slate-700/50 z-50 flex justify-around items-center px-2 pb-safe">

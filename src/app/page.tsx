@@ -1,9 +1,5 @@
-import VoiceDashboard from "@/components/ui/VoiceDashboard";
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return (
-    <main className="h-full flex flex-col overflow-hidden">
-      <VoiceDashboard />
-    </main>
-  );
+  redirect('/dashboard');
 }
