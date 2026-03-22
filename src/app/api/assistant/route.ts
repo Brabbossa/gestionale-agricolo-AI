@@ -42,6 +42,23 @@ Non aggiungere mai spiegazioni, testo, markdown o commenti al di fuori del JSON.
    - Esempio: "svuota l'inventario" -> { "azione": "ELIMINA_TUTTO", "target_types": ["PIANTE"] }
    - Esempio: "elimina tutti gli ordini e tutto l'inventario" -> { "azione": "ELIMINA_TUTTO", "target_types": ["ORDINI", "PIANTE"] }
 
+6. TRATTAMENTI FITOSANITARI:
+   - "azione": "TRATTAMENTO"
+   - Parole chiave: "trattamento", "ho dato", "somministrato", "usato", "spruzzato" (riferito a prodotti come Rame, Zolfo, Olio Bianco, Concime)
+   - "prodotto": nome del prodotto usato (es. "Rame", "Concime")
+   - "quantita": numero (es. 2, 0.5)
+   - "lotto": (opzionale) dove è stato fatto (es. "Serra 4", "Piazzale", "Ciclamini")
+   - Esempio: "Ho dato 2 litri di Rame in Serra 4" -> { "azione": "TRATTAMENTO", "prodotto": "Rame", "quantita": 2, "lotto": "Serra 4" }
+
+7. PRODUZIONE E SEMINE:
+   - "azione": "SEMINA"
+   - Parole chiave: "seminato", "piantato talee", "messo a dimora" (riferito a produzione interna, NON a scarico da camion)
+   - "specie": tipo di pianta seminata
+   - "quantita": quante piante/semi
+   - "settimane": stima di settimane per la crescita (se l'utente lo dice, es. "pronte tra 12 settimane", metti 12. Altrimenti ometti)
+   - "posizione_destinazione": dove sono stati messi (es. "Bancale 2")
+   - Esempio: "Ho seminato 500 ciclamini al Bancale 1, pronti in 10 settimane" -> { "azione": "SEMINA", "specie": "ciclamino", "quantita": 500, "settimane": 10, "posizione_destinazione": "Bancale 1" }
+
 ==REGOLE CRITICHE==
 - COMPRARE / ACQUISTARE / ORDINARE -> SEMPRE "ORDINE", MAI "CARICO".
 - "CARICO" solo se la merce e' fisicamente arrivata in struttura.
@@ -223,6 +240,70 @@ export async function POST(req: Request) {
 
       await logToHistory(message, deletedMsg, azione, true);
       return NextResponse.json({ result: cmd, message: deletedMsg });
+    }
+
+    // ── TRATTAMENTO FITOSANITARIO ─────────────────────────────────────────────
+    if (azione === 'TRATTAMENTO') {
+      const { prodotto, quantita, lotto } = cmd;
+      if (!prodotto || !quantita) return NextResponse.json({ error: 'Specifica prodotto e quantità usata.' }, { status: 422 });
+
+      // Cerca prodotto in magazzino
+      const { data: prodotti } = await supabase.from('Prodotti_Fitosanitari').select('*').ilike('nome', `%${prodotto}%`);
+      let prodId = null;
+      let prodNome = prodotto;
+      let prodUnita = 'L/Kg';
+
+      if (prodotti && prodotti.length > 0) {
+        prodId = prodotti[0].id;
+        prodNome = prodotti[0].nome;
+        prodUnita = prodotti[0].unita_misura;
+        // Aggiorna giacenza
+        await supabase.from('Prodotti_Fitosanitari')
+          .update({ giacenza: Math.max(0, prodotti[0].giacenza - quantita) })
+          .eq('id', prodId);
+      }
+
+      // Inserisci log nel registro
+      const { data: newTrattamento, error } = await supabase.from('Trattamenti').insert({
+        prodotto_id: prodId,
+        prodotto_nome: prodNome,
+        quantita_usata: quantita,
+        unita_misura: prodUnita,
+        lotto: lotto || null,
+        note: `Registrato via voce`
+      }).select().single();
+
+      if (error) throw error;
+      const msg = `🧪 Trattamento registrato: ${quantita}${prodUnita} di ${prodNome} ${lotto ? `su ${lotto}` : ''}`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, record: newTrattamento, message: msg });
+    }
+
+    // ── PRODUZIONE / SEMINA ───────────────────────────────────────────────────
+    if (azione === 'SEMINA') {
+      const { specie, quantita, settimane, posizione_destinazione } = cmd;
+      if (!specie || !quantita) return NextResponse.json({ error: 'Specifica cosa hai seminato e la quantità.' }, { status: 422 });
+
+      let data_prevista_vendita = null;
+      const sett = settimane || 12; // Default 12 settimane
+
+      const d = new Date();
+      d.setDate(d.getDate() + (sett * 7));
+      data_prevista_vendita = d.toISOString().split('T')[0];
+
+      const { data: newLotto, error } = await supabase.from('Lotti_Produzione').insert({
+        specie: specie,
+        n_pezzi: quantita,
+        settimane_crescita: sett,
+        data_prevista_vendita: data_prevista_vendita,
+        posizione: posizione_destinazione || null,
+        stato: 'Semina'
+      }).select().single();
+
+      if (error) throw error;
+      const msg = `🌱 Semina registrata: ${quantita} ${specie} (Pronti stimati in ${sett} sett.)`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, record: newLotto, message: msg });
     }
 
     // ── WAREHOUSE OPERATIONS ──────────────────────────────────────────────────

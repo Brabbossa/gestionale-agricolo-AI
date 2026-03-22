@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Mic, ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, Settings, Trees, Users, FileCheck } from "lucide-react";
+import { 
+  Mic, ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, 
+  Settings, Trees, Users, FileCheck, ShoppingCart, TrendingUp, 
+  FlaskConical, Container, Leaf
+} from "lucide-react";
 import React from 'react';
 
 const mobileNavItems = [
@@ -15,12 +19,16 @@ const desktopNavItems = [
   { name: "Assistente", href: "/", icon: Mic },
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Inventario Vivo", href: "/inventario", icon: Sprout },
-  { name: "Ordini (Fornitori)", href: "/ordini", icon: Package },
+  { name: "Acquisti", href: "/ordini", icon: ShoppingCart },
+  { name: "Vendite e DDT", href: "/vendite", icon: TrendingUp },
   { name: "Task", href: "/task", icon: ClipboardList },
   { name: "Scanner", href: "/scanner", icon: ScanLine },
-  // ERP Replacement
+  // ERP
   { name: "Clienti (CRM)", href: "/clienti", icon: Users },
-  { name: "Genera DDT", href: "/vendite", icon: FileCheck },
+  // Advanced Modules
+  { name: "Registro Fitosanitario", href: "/trattamenti", icon: FlaskConical },
+  { name: "Carrelli CC", href: "/carrelli", icon: Container },
+  { name: "Produzione", href: "/produzione", icon: Leaf },
   { name: "Impostazioni", href: "/impostazioni", icon: Settings },
 ];
 
@@ -47,21 +55,21 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
           </h1>
         </div>
         
-        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {desktopNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link 
                 key={item.href} 
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
                   isActive 
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium shadow-[0_0_15px_rgba(16,185,129,0.1)]" 
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
                 }`}
               >
-                <item.icon className={`w-5 h-5 ${isActive ? "text-emerald-400" : "text-slate-400"}`} />
-                {item.name}
+                <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-emerald-400" : "text-slate-400"}`} />
+                <span className="text-sm">{item.name}</span>
               </Link>
             )
           })}
