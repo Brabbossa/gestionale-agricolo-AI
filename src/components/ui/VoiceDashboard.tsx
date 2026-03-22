@@ -169,18 +169,22 @@ export default function VoiceDashboard() {
     setTranscript("");
 
     try {
-      // Chiama la Edge Function Deno
-      const { data, error } = await supabase.functions.invoke('voice-interpreter', {
-        body: { message: text, pendingCmd }
+      // Chiama l'API Next.js
+      const response = await fetch('/api/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, pendingCmd }),
       });
 
-      if (error) {
-        throw new Error(error.message || 'Errore di processamento (Edge Function)');
+      const data = await response.json();
+
+      if (!response.ok && !data.needs_confirmation) {
+        throw new Error(data.error || 'Errore di processamento');
       }
 
       if (data.needs_confirmation) {
         setPendingCmd(data.pendingCmd);
-        setToast({ action: 'UNKNOWN', message: data.message, show: true });
+        setToast({ action: 'ELIMINA', message: data.message, show: true });
         setIsProcessing(false);
         // Autostart microfono per aspettare il "Si" o "No"
         setTimeout(() => {
@@ -201,6 +205,7 @@ export default function VoiceDashboard() {
       });
 
     } catch (error: any) {
+      setPendingCmd(null);
       setToast({ action: 'UNKNOWN', message: error.message || 'Errore non specificato.', show: true });
     } finally {
       setIsProcessing(false);
