@@ -1,9 +1,9 @@
-import VoiceAssistant from "@/components/ui/VoiceAssistant";
+import VoiceDashboard from "@/components/ui/VoiceDashboard";
 
 export default function Home() {
   return (
     <main className="h-full flex flex-col overflow-hidden">
-      <VoiceAssistant />
+      <VoiceDashboard />
     </main>
   );
 }
