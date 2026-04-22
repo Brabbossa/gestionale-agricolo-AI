@@ -36,10 +36,14 @@ Azioni che puoi riconoscere:
    Esempio: "Le rose nella Serra A sono in emergenza" -> { "azione": "STATO_SALUTE", "pianta": "rose", "destinazione": "Serra A", "stato": "Emergenza" }
    * stati possibili: "Ottimo", "Attenzione", "Emergenza"
 
+8. "CREA_TASK": L'utente chiede di ricordargli qualcosa o crea una nuova attività/promemoria.
+   Esempio: "Ricordati di innaffiare i bonsai" -> { "azione": "CREA_TASK", "titolo": "Innaffiare i bonsai" }
+   Esempio: "Aggiungi un task per domani: potare le rose" -> { "azione": "CREA_TASK", "titolo": "Potare le rose" }
+
 ==REGOLE==
 - Restituisci SOLO JSON puro.
 - "quantita" deve essere un numero intero.
-- "pianta" e "destinazione" devono essere stringhe.`;
+- "pianta", "destinazione" e "titolo" devono essere stringhe.`;
 
 // Utility: log to Chat_History
 async function logToHistory(user_message: string, ai_response: string, azione: string, success: boolean) {
@@ -333,6 +337,25 @@ export async function POST(req: Request) {
       const msg = `🩺 Stato di "${lotto[0].nome_pianta}" in ${locs[0].nome_zona} aggiornato a: ${cmd.stato}.`;
       await logToHistory(message, msg, azione, true);
       return NextResponse.json({ result: cmd, message: msg });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 9) CREA_TASK
+    // ──────────────────────────────────────────────────────────────
+    if (azione === 'CREA_TASK') {
+      if (!cmd.titolo) {
+        return NextResponse.json({ error: 'Specifica il titolo o la descrizione del promemoria.' }, { status: 422 });
+      }
+
+      const { data: newTask, error } = await supabase.from('Task').insert({ 
+        titolo: cmd.titolo, 
+        status: 'Da fare' 
+      }).select().single();
+
+      if (error) throw error;
+      const msg = `✅ Promemoria salvato: "${cmd.titolo}".`;
+      await logToHistory(message, msg, azione, true);
+      return NextResponse.json({ result: cmd, record: newTask, message: msg });
     }
 
     // ──────────────────────────────────────────────────────────────
