@@ -55,6 +55,10 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("LA CHIAVE API NON E' CARICATA IN MEMORIA. DEVI FORZARE IL RIAVVIO DEL TERMINALE CON CTRL+C E POI SCRIVERE NPM RUN DEV.");
+    }
+
     const ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY as string,
     });
