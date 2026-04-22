@@ -8,11 +8,18 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE public."Anagrafica" (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tipo TEXT NOT NULL CHECK (tipo IN ('Cliente', 'Fornitore')),
+    categoria TEXT,
     ragione_sociale TEXT NOT NULL,
     partita_iva TEXT NOT NULL,
     codice_fiscale TEXT,
     indirizzo_sede TEXT,
     codice_sdi_pec TEXT,
+    email TEXT,
+    telefono TEXT,
+    persona_riferimento TEXT,
+    iban TEXT,
+    condizioni_pagamento TEXT,
+    note TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

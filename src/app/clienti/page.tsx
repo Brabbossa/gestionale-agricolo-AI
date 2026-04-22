@@ -6,11 +6,18 @@ import { supabase } from "@/lib/supabase";
 type Anagrafica = {
   id: string;
   tipo: 'Cliente' | 'Fornitore';
+  categoria: string | null;
   ragione_sociale: string;
   partita_iva: string;
   codice_fiscale: string | null;
   indirizzo_sede: string | null;
   codice_sdi_pec: string | null;
+  email: string | null;
+  telefono: string | null;
+  persona_riferimento: string | null;
+  iban: string | null;
+  condizioni_pagamento: string | null;
+  note: string | null;
 };
 
 export default function ClientiPage() {
@@ -18,7 +25,8 @@ export default function ClientiPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [formData, setFormData] = useState<Partial<Anagrafica>>({ tipo: 'Cliente', ragione_sociale: '', partita_iva: '' });
+  const initialFormState: Partial<Anagrafica> = { tipo: 'Cliente', categoria: '', ragione_sociale: '', partita_iva: '', email: '', telefono: '', persona_riferimento: '', iban: '', condizioni_pagamento: '', note: '' };
+  const [formData, setFormData] = useState<Partial<Anagrafica>>(initialFormState);
   const [saving, setSaving] = useState(false);
 
   const fetchRecords = async () => {
@@ -44,7 +52,7 @@ export default function ClientiPage() {
       });
     }
     setModalOpen(false);
-    setFormData({ tipo: 'Cliente', ragione_sociale: '', partita_iva: '' });
+    setFormData(initialFormState);
     setSaving(false);
     fetchRecords();
   };
@@ -83,7 +91,7 @@ export default function ClientiPage() {
             />
           </div>
           <button 
-            onClick={() => { setFormData({ tipo: 'Cliente', ragione_sociale: '', partita_iva: '' }); setModalOpen(true); }}
+            onClick={() => { setFormData(initialFormState); setModalOpen(true); }}
             className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-xl transition-colors flex items-center gap-2 px-4 shadow-lg shadow-emerald-600/20"
           >
             <Plus className="w-5 h-5" />
@@ -97,10 +105,10 @@ export default function ClientiPage() {
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-slate-800/80 border-b border-slate-700/50">
-                <th className="p-4 font-medium text-slate-400 text-sm">Tipo</th>
+                <th className="p-4 font-medium text-slate-400 text-sm">Tipo / Categoria</th>
                 <th className="p-4 font-medium text-slate-400 text-sm">Ragione Sociale</th>
                 <th className="p-4 font-medium text-slate-400 text-sm">Partita IVA</th>
-                <th className="p-4 font-medium text-slate-400 text-sm hidden sm:table-cell">Indirizzo</th>
+                <th className="p-4 font-medium text-slate-400 text-sm hidden sm:table-cell">Contatti</th>
                 <th className="p-4 font-medium text-slate-400 text-sm hidden lg:table-cell">SDI/PEC</th>
                 <th className="p-4 font-medium text-right text-slate-400 text-sm">Azioni</th>
               </tr>
@@ -111,13 +119,22 @@ export default function ClientiPage() {
               ) : filteredRecords.length > 0 ? filteredRecords.map(rec => (
                 <tr key={rec.id} className="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
                   <td className="p-4">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-md inline-block ${rec.tipo === 'Cliente' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                      {rec.tipo}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-md inline-block ${rec.tipo === 'Cliente' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                        {rec.tipo}
+                      </span>
+                      {rec.categoria && <span className="text-xs text-slate-400">{rec.categoria}</span>}
+                    </div>
                   </td>
                   <td className="p-4 text-slate-100 font-medium">{rec.ragione_sociale}</td>
                   <td className="p-4 text-emerald-400 font-mono text-sm">{rec.partita_iva}</td>
-                  <td className="p-4 text-slate-400 text-sm hidden sm:table-cell truncate max-w-[200px]">{rec.indirizzo_sede || '-'}</td>
+                  <td className="p-4 text-slate-400 text-sm hidden sm:table-cell truncate max-w-[200px]">
+                    <div className="flex flex-col">
+                      {rec.telefono && <span>{rec.telefono}</span>}
+                      {rec.email && <span className="text-xs opacity-70">{rec.email}</span>}
+                      {!rec.telefono && !rec.email && <span>-</span>}
+                    </div>
+                  </td>
                   <td className="p-4 text-slate-400 text-sm hidden lg:table-cell">{rec.codice_sdi_pec || '-'}</td>
                   <td className="p-4 text-right flex justify-end gap-2">
                     <button onClick={() => { setFormData(rec); setModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
@@ -145,41 +162,102 @@ export default function ClientiPage() {
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-200">✕</button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Tipo</label>
-                  <select 
-                    value={formData.tipo} onChange={e => setFormData({...formData, tipo: e.target.value as 'Cliente'|'Fornitore'})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="Cliente">Cliente</option>
-                    <option value="Fornitore">Fornitore</option>
-                  </select>
+            <form onSubmit={handleSave} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              
+              {/* Dati Generali */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-emerald-400 border-b border-slate-700 pb-1">Dati Generali</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Tipo *</label>
+                    <select value={formData.tipo} onChange={e => setFormData({...formData, tipo: e.target.value as 'Cliente'|'Fornitore'})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+                      <option value="Cliente">Cliente</option>
+                      <option value="Fornitore">Fornitore</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Categoria</label>
+                    <select value={formData.categoria || ''} onChange={e => setFormData({...formData, categoria: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+                      <option value="">Seleziona...</option>
+                      <option value="Privato">Privato</option>
+                      <option value="Azienda Agricola">Azienda Agricola</option>
+                      <option value="Paesaggista / Giardiniere">Paesaggista / Giardiniere</option>
+                      <option value="Garden Center">Garden Center</option>
+                      <option value="GDO">GDO</option>
+                      <option value="Grossista">Grossista</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Ragione Sociale *</label>
+                    <input required type="text" value={formData.ragione_sociale} onChange={e => setFormData({...formData, ragione_sociale: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Indirizzo Sede</label>
+                    <input type="text" value={formData.indirizzo_sede || ''} onChange={e => setFormData({...formData, indirizzo_sede: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
                 </div>
-                
-                <div className="col-span-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Ragione Sociale *</label>
-                  <input required type="text" value={formData.ragione_sociale} onChange={e => setFormData({...formData, ragione_sociale: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
-                </div>
+              </div>
 
+              {/* Contatti */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-emerald-400 border-b border-slate-700 pb-1">Contatti</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Telefono</label>
+                    <input type="tel" value={formData.telefono || ''} onChange={e => setFormData({...formData, telefono: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Email</label>
+                    <input type="email" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Persona di Riferimento</label>
+                    <input type="text" value={formData.persona_riferimento || ''} onChange={e => setFormData({...formData, persona_riferimento: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" placeholder="Nome referente (es. Marco acquisti)" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Amministrazione */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-emerald-400 border-b border-slate-700 pb-1">Amministrazione</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Partita IVA *</label>
+                    <input required type="text" value={formData.partita_iva} onChange={e => setFormData({...formData, partita_iva: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Codice Fiscale</label>
+                    <input type="text" value={formData.codice_fiscale || ''} onChange={e => setFormData({...formData, codice_fiscale: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Codice SDI / PEC</label>
+                    <input type="text" value={formData.codice_sdi_pec || ''} onChange={e => setFormData({...formData, codice_sdi_pec: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Condizioni Pagamento</label>
+                    <select value={formData.condizioni_pagamento || ''} onChange={e => setFormData({...formData, condizioni_pagamento: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+                      <option value="">Seleziona...</option>
+                      <option value="Bonifico Anticipato">Bonifico Anticipato</option>
+                      <option value="Bonifico 30gg">Bonifico 30gg DF</option>
+                      <option value="Bonifico 60gg">Bonifico 60gg DF</option>
+                      <option value="RiBa 30gg">RiBa 30gg</option>
+                      <option value="RiBa 60gg">RiBa 60gg</option>
+                      <option value="Contanti alla consegna">Contanti alla consegna</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">IBAN</label>
+                    <input type="text" value={formData.iban || ''} onChange={e => setFormData({...formData, iban: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 font-mono text-sm" placeholder="IT00A0000000000000000000000" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Note */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-emerald-400 border-b border-slate-700 pb-1">Info Aggiuntive</h4>
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Partita IVA *</label>
-                  <input required type="text" value={formData.partita_iva} onChange={e => setFormData({...formData, partita_iva: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Codice Fiscale</label>
-                  <input type="text" value={formData.codice_fiscale || ''} onChange={e => setFormData({...formData, codice_fiscale: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Indirizzo Sede</label>
-                  <input type="text" value={formData.indirizzo_sede || ''} onChange={e => setFormData({...formData, indirizzo_sede: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Codice SDI o PEC Destinatario</label>
-                  <input type="text" value={formData.codice_sdi_pec || ''} onChange={e => setFormData({...formData, codice_sdi_pec: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Note Interne</label>
+                  <textarea rows={3} value={formData.note || ''} onChange={e => setFormData({...formData, note: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 resize-none" placeholder="Orari di scarico, indicazioni logistiche..." />
                 </div>
               </div>
 
