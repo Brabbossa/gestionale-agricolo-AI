@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
-  ClipboardList, ScanLine, LayoutDashboard, Sprout, Package, 
+  ClipboardList, LayoutDashboard, Sprout, Package, 
   Settings, Trees, Users, FileCheck, ShoppingCart, TrendingUp, 
   FlaskConical, Container, Leaf
 } from "lucide-react";
@@ -13,7 +13,6 @@ import GlobalVoiceFAB from "@/components/ui/GlobalVoiceFAB";
 const mobileNavItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Task", href: "/task", icon: ClipboardList },
-  { name: "Scanner", href: "/scanner", icon: ScanLine },
 ];
 
 const desktopNavItems = [
@@ -22,7 +21,6 @@ const desktopNavItems = [
   { name: "Acquisti", href: "/ordini", icon: ShoppingCart },
   { name: "Vendite e DDT", href: "/vendite", icon: TrendingUp },
   { name: "Task", href: "/task", icon: ClipboardList },
-  { name: "Scanner", href: "/scanner", icon: ScanLine },
   // ERP
   { name: "Clienti (CRM)", href: "/clienti", icon: Users },
   // Advanced Modules
