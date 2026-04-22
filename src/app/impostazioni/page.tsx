@@ -1,11 +1,12 @@
 "use client";
 import { Settings, UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Papa from "papaparse";
 import { supabase } from "@/lib/supabase";
 
 export default function ImpostazioniPage() {
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -120,8 +121,19 @@ export default function ImpostazioniPage() {
              <div className="flex flex-col items-center gap-4 text-slate-400">
                <UploadCloud className="w-12 h-12 text-slate-500" />
                <p className="text-center">
-                 Trascina qui il tuo file CSV<br />o <button className="text-emerald-400 hover:underline">sfoglia dal computer</button>
+                 Trascina qui il tuo file CSV<br />o <button onClick={() => fileInputRef.current?.click()} className="text-emerald-400 hover:underline">sfoglia dal computer</button>
                </p>
+               <input 
+                 type="file" 
+                 ref={fileInputRef} 
+                 className="hidden" 
+                 accept=".csv" 
+                 onChange={(e) => {
+                   if (e.target.files && e.target.files.length > 0) {
+                     setFile(e.target.files[0]);
+                   }
+                 }} 
+               />
              </div>
           )}
         </div>

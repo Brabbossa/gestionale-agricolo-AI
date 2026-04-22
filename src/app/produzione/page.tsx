@@ -14,6 +14,8 @@ const COLUMNS = [
 export default function ProduzionePage() {
   const [lotti, setLotti] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ nome: '', data_semina: new Date().toISOString().split('T')[0] });
 
   useEffect(() => {
     fetchLotti();
@@ -29,6 +31,14 @@ export default function ProduzionePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    await supabase.from('Lotti_Produzione').insert([{ ...formData, stato: 'Semina' }]);
+    setModalOpen(false);
+    setFormData({ nome: '', data_semina: new Date().toISOString().split('T')[0] });
+    fetchLotti();
   }
 
   async function updateStato(id: string, newStato: string) {
@@ -51,7 +61,7 @@ export default function ProduzionePage() {
           <p className="text-slate-400 mt-1">Kanban board per il ciclo di vita delle piante (Semina → Crescita → Pronto)</p>
         </div>
 
-        <button className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full md:w-auto">
+        <button onClick={() => setModalOpen(true)} className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full md:w-auto">
           <Plus className="w-4 h-4" />
           <span>Nuovo Lotto</span>
         </button>
@@ -76,13 +86,8 @@ export default function ProduzionePage() {
                   {colLotti.map(lotto => (
                     <div key={lotto.id} className="glass-card p-4 hover:border-emerald-500/30 transition-colors group cursor-grab active:cursor-grabbing">
                       <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-slate-200">{lotto.specie}</h3>
-                        <span className="bg-slate-800 text-slate-300 text-xs px-2 py-1 rounded font-mono">
-                          {lotto.n_pezzi} pz
-                        </span>
+                        <h3 className="font-bold text-slate-200">{lotto.nome || 'Lotto Sconosciuto'}</h3>
                       </div>
-                      
-                      {lotto.varieta && <div className="text-sm text-slate-400 mb-3">{lotto.varieta}</div>}
                       
                       <div className="flex flex-col gap-2 mt-4 text-xs text-slate-500">
                         <div className="flex items-center gap-2">
@@ -119,13 +124,38 @@ export default function ProduzionePage() {
                   ))}
                   {colLotti.length === 0 && (
                      <div className="h-full min-h-[150px] border-2 border-dashed border-slate-800 rounded-xl flex items-center justify-center text-slate-500 text-sm">
-                       Nessun loto qui
+                       Nessun lotto qui
                      </div>
                   )}
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-100">Nuovo Lotto Produzione</h3>
+              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-200">✕</button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Nome Lotto *</label>
+                <input required type="text" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" placeholder="Es: Pomodori San Marzano" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Data Semina *</label>
+                <input required type="date" value={formData.data_semina} onChange={e => setFormData({...formData, data_semina: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500" />
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">Annulla</button>
+                <button type="submit" className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors">Avvia Produzione</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
