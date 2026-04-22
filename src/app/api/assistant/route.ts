@@ -2,10 +2,6 @@ import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY as string,
-});
-
 const SYSTEM_MESSAGE = `Sei l'interprete vocale intelligente di un gestionale agricolo per vivai.
 L'utente parla e tu restituisci ESCLUSIVAMENTE UN JSON, senza markdown, senza testo extra.
 
@@ -59,6 +55,10 @@ export async function POST(req: Request) {
   }
 
   try {
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY as string,
+    });
+
     // ──────────────────────────────────────────────────────────────
     // 1) GESTIONE CONFERMA PRECEDENTE (Sicurezza comandi distruttivi)
     // ──────────────────────────────────────────────────────────────
