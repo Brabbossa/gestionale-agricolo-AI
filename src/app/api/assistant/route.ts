@@ -368,6 +368,6 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('Error in AI Assistant API:', error);
     await logToHistory(message, error.message || 'Internal error', 'UNKNOWN', false);
-    return NextResponse.json({ error: "Si è verificato un errore. Riprova." }, { status: 500 });
+    return NextResponse.json({ error: "Debug - Errore server: " + (error.message || 'Sconosciuto') }, { status: 500 });
   }
 }
